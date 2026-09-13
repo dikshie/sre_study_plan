@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sre-study-app
+  labels:
+    app: sre-study-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: sre-study-app
+  template:
+    metadata:
+      labels:
+        app: sre-study-app
+      annotations:
+        # tells Prometheus (if using annotation-based scraping) to scrape this pod
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5000"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: sre-study-app
+          # Replace with your actual image, e.g. ghcr.io/<you>/sre-study-app:latest
+          image: sre-study-app:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+          envFrom:
+            - configMapRef:
+                name: sre-study-app-config
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 5
