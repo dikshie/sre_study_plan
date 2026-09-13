@@ -1,26 +1,36 @@
-# --- Build stage: install dependencies into a venv ---
+# --- Build stage: use uv to install dependencies fast, into a venv ---
 FROM python:3.12-slim AS builder
+
+# Install uv (static binary, no pip needed)
+COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /uvx /bin/
 
 WORKDIR /app
 
-RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy only dependency files first for better layer caching
+COPY pyproject.toml uv.lock ./
 
-# --- Final stage: copy venv + app code only ---
+# Install only production deps (no dev group), into /app/.venv
+RUN uv sync --frozen --no-dev --no-install-project
+
+# Now copy the app code and finalize the venv
+COPY app.py .
+RUN uv sync --frozen --no-dev
+
+# --- Final stage: copy the built venv + app code only ---
 FROM python:3.12-slim
 
 WORKDIR /app
 
-# Create a non-root user (good practice, and interview-relevant)
 RUN useradd --create-home --shell /bin/bash appuser
 
-COPY --from=builder /opt/venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
+COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/app.py .
 
-COPY app.py .
+ENV PATH="/app/.venv/bin:$PATH"
 
 USER appuser
 
@@ -29,5 +39,4 @@ EXPOSE 5000
 ENV APP_ENV=production
 ENV PORT=5000
 
-# gunicorn is more production-appropriate than Flask's dev server
 CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--access-logfile", "-", "app:app"]

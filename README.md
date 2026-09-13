@@ -18,27 +18,55 @@ Docker → Kubernetes → CI/CD → Observability.
 | DELETE | `/api/tasks/<id>`   | Delete a task                                 |
 | GET    | `/api/fail`         | Always returns 500 (for alerting practice)    |
 
-## Run locally (no Docker)
+## Run locally (with uv)
+
+This project uses [uv](https://docs.astral.sh/uv/) for dependency and
+virtual environment management — no manual `venv` + `pip` steps needed.
+
+Install uv (one-time, if you don't have it):
 
 ```bash
-pip install -r requirements-dev.txt
-python app.py
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Then:
+
+```bash
+uv sync            # creates .venv and installs deps (incl. dev group) from uv.lock
+uv run python app.py
 # app runs on http://localhost:5000
 ```
 
 Run tests:
 
 ```bash
-pytest tests/ -v
+uv run pytest tests/ -v
 ```
 
 Lint:
 
 ```bash
-flake8 app.py tests/ --max-line-length=100
+uv run flake8 app.py tests/ --max-line-length=100
 ```
 
+`uv sync` installs both runtime and dev dependencies by default. For a
+production-only install (no dev tools), use `uv sync --no-dev` — this is
+what the Dockerfile does.
+
+Add a new dependency:
+
+```bash
+uv add requests            # runtime dependency
+uv add --dev mypy          # dev-only dependency
+```
+
+This updates `pyproject.toml` and `uv.lock` automatically — commit both.
+
 ## Run with Docker
+
+The Dockerfile uses `uv` internally (via a static binary copied from
+`ghcr.io/astral-sh/uv`) to install dependencies from `uv.lock` — this makes
+builds faster and fully reproducible.
 
 ```bash
 docker build -t sre-study-app:latest .
